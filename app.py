@@ -5,7 +5,7 @@ import base64
 from io import BytesIO
 
 # 1. 파일명 설정 (깃허브에 올린 이름과 똑같이 맞춤)
-FILE_NAME = 'data.csv' 
+FILE_NAME = 'graded_reading_texts.xlsx - Sheet1.csv'
 
 @st.cache_data
 def load_data():
