@@ -5,7 +5,7 @@ import base64
 from io import BytesIO
 
 # 1. 파일명 (GitHub에 있는 이름 그대로)
-FILE_NAME = 'graded_reading_texts.xlsx-Sheet1.csv'
+FILE_NAME = 'graded_reading_texts-Sheet1.csv.xlsx'
 
 # 2. 데이터 불러오기
 @st.cache_data
