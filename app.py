@@ -9,12 +9,14 @@ FILE_NAME = 'graded_reading_texts.xlsx - Sheet1.csv'
 
 @st.cache_data
 def load_data():
-    try:
-        # utf-8-sig는 엑셀 한글 깨짐을 방지하는 가장 안전한 방식입니다.
-        return pd.read_csv(FILE_NAME, encoding='utf-8-sig')
-    except:
-        # 혹시 모를 에러를 대비해 다른 인코딩도 시도합니다.
-        return pd.read_csv(FILE_NAME, encoding='cp949')
+    # 파일 읽기
+    df = pd.read_csv(FILE_NAME, encoding='utf-8-sig')
+    
+   
+    df.columns = df.columns.str.strip().str.capitalize()
+    
+   
+    return df
 
 def speak(text):
     tts = gTTS(text=text, lang='en')
