@@ -9,15 +9,22 @@ FILE_NAME = 'data.csv'
 
 @st.cache_data
 def load_data():
-    try:
-        df = pd.read_csv(FILE_NAME, encoding='utf-8-sig')
-        df.columns = ['Topic', 'Level', 'Passage', 'Vocabulary', 'Grammar', 'Question', 'Option', 'Answer']
-        for col in df.columns:
-            df[col] = df[col].astype(str).str.strip()
-        return df
-    except Exception as e:
-        st.error(f"데이터 파일을 읽는 중 오류가 발생했습니다. 파일명과 형식을 확인해주세요: {e}")
-        return None
+    # 여러 인코딩 방식을 순차적으로 시도하여 에러를 방지합니다.
+    encodings = ['utf-8-sig', 'cp949', 'euc-kr']
+    for encoding in encodings:
+        try:
+            df = pd.read_csv(FILE_NAME, encoding=encoding)
+            # 열 이름을 강제로 지정 (데이터 순서: 주제, 레벨, 지문, 어휘, 구문, 문제, 보기, 정답)
+            df.columns = ['Topic', 'Level', 'Passage', 'Vocabulary', 'Grammar', 'Question', 'Option', 'Answer']
+            # 데이터 공백 제거
+            for col in df.columns:
+                df[col] = df[col].astype(str).str.strip()
+            return df
+        except:
+            continue
+    
+    st.error(f"데이터 파일을 읽을 수 없습니다. 파일이 '{FILE_NAME}'인지, 그리고 올바른 CSV 형식인지 확인해주세요.")
+    return None
 
 def speak(text):
     try:
@@ -31,26 +38,25 @@ def speak(text):
     except:
         st.warning("음성 재생 실패")
 
-# --- 앱 상태 초기화 함수 ---
-def reset_app():
-    st.session_state.show_quiz = False
-    st.rerun()
+# --- 앱 상태 관리 함수 ---
+def init_session():
+    if 'show_quiz' not in st.session_state:
+        st.session_state.show_quiz = False
+    if 'quiz_submitted' not in st.session_state:
+        st.session_state.quiz_submitted = False
 
 # --- UI 설정 ---
 st.set_page_config(page_title="고1 영어 수준별 학습", layout="wide")
-st.title("📚 고등학교 1학년 영어 수준별 학습 앱")
+init_session()
 
-# 세션 상태 관리
-if 'show_quiz' not in st.session_state:
-    st.session_state.show_quiz = False
+st.title("📚 고등학교 1학년 영어 수준별 학습 앱")
 
 df = load_data()
 
 if df is not None:
-    # 1. 사이드바: 학생 정보 및 학습 선택
+    # 1. 사이드바: 학습자 정보 및 설정
     with st.sidebar:
         st.header("👤 학습자 정보 입력")
-        # 학년, 반, 번호, 이름 입력란 추가
         col1, col2, col3 = st.columns(3)
         with col1:
             grade = st.text_input("학년", "1")
@@ -67,9 +73,11 @@ if df is not None:
         u_level = st.selectbox("레벨 선택", df['Level'].unique())
         
         st.divider()
-        # 처음으로 버튼 (설정 초기화)
+        # 처음으로 버튼
         if st.button("🏠 처음으로"):
-            reset_app()
+            st.session_state.show_quiz = False
+            st.session_state.quiz_submitted = False
+            st.rerun()
 
     # 2. 본문: 지문 학습 섹션
     try:
@@ -92,7 +100,7 @@ if df is not None:
 
         st.divider()
 
-        # 3. 문제 풀기 섹션
+        # 3. 문제 풀기 및 피드백
         if not st.session_state.show_quiz:
             if st.button("📝 학습하기 (문제 풀기)"):
                 st.session_state.show_quiz = True
@@ -101,39 +109,40 @@ if df is not None:
         if st.session_state.show_quiz:
             st.subheader("✍️ 확인 문제")
             qs = str(sel['Question']).split('|')
+            opts = str(sel['Option']).split('|')
             ans = str(sel['Answer']).split('|')
             
             user_choices = []
             for i in range(len(qs)):
                 st.write(f"**Q{i+1}. {qs[i].strip()}**")
-                choice = st.radio(f"정답 선택 {i+1}", ["(A)", "(B)", "(C)", "(D)"], key=f"q{i}", horizontal=True)
-                user_choices.append(choice)
+                # 라디오 버튼의 키를 고유하게 설정하여 리런 시에도 유지되도록 함
+                u_choice = st.radio(f"정답 선택 {i+1}", ["(A)", "(B)", "(C)", "(D)"], key=f"ans_{u_topic}_{u_level}_{i}", horizontal=True)
+                user_choices.append(u_choice)
 
-            c_btn1, c_btn2 = st.columns([0.2, 0.8])
-            with c_btn1:
-                if st.button("✅ 채점 완료"):
-                    score = sum([1 for u, a in zip(user_choices, ans) if u.strip() == a.strip()])
-                    st.session_state.final_score = score
+            if st.button("✅ 채점 완료"):
+                st.session_state.quiz_submitted = True
             
-            if 'final_score' in st.session_state:
-                score = st.session_state.final_score
+            if st.session_state.quiz_submitted:
+                score = sum([1 for u, a in zip(user_choices, ans) if u.strip() == a.strip()])
                 st.subheader(f"📊 {grade}학년 {s_class}반 {s_num}번 {name} 학생의 결과")
                 st.write(f"총 {len(qs)}문제 중 {score}문제를 맞혔습니다!")
                 
-                if score == len(qs):
+                # 피드백 제공
+                if score >= 4:
                     st.balloons()
-                    st.success("🌟 완벽해요! 선생님이 가득 칭찬합니다!")
-                elif score >= len(qs) // 2:
-                    st.warning("👏 노력하는 모습이 멋져요! 조금만 더 하면 다 맞을 수 있어요!")
+                    st.success("🌟 열심히 공부한 것에 대해 선생님이 가득 칭찬합니다! 정말 대단해요!")
+                elif score >= 2:
+                    st.warning("👏 노력하는 모습이 아주 멋져요! 조금만 더 열심히 하면 좋은 결과가 있을 거예요!")
                 else:
-                    st.error("💪 조금 어렵나요? 다시 한번 지문을 읽어보며 도전해봐요!")
+                    st.error("💪 어렵더라도 포기하지 말고 꾸준히 노력해보자! 선생님은 너를 응원해.")
                 
-                # 다시하기 버튼 (문제 풀기 상태만 초기화)
+                # 다시하기 버튼
                 if st.button("🔄 다시하기"):
-                    st.session_state.show_quiz = False
-                    if 'final_score' in st.session_state:
-                        del st.session_state.final_score
+                    st.session_state.quiz_submitted = False
                     st.rerun()
+                    
+    except Exception:
+        st.warning("해당 주제와 레벨에 맞는 데이터를 불러올 수 없습니다.")
                     
     except IndexError:
         st.warning("해당 주제와 레벨에 맞는 지문이 없습니다. 다른 옵션을 선택해주세요.")
